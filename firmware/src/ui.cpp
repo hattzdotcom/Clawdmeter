@@ -68,6 +68,21 @@ static void compute_layout(const BoardCaps& c) {
         L.bt_device_font   = &font_styrene_28;
         L.bt_credit_1_font = &font_styrene_24;
         L.bt_credit_2_font = &font_styrene_20;
+    } else if (c.width >= 560) {
+        // Wide landscape layout — tuned for 600x450 (LilyGo T4-S3).
+        // No top bar, so panels start near the top and fill most of the height.
+        L.content_y = 10;
+        L.usage_panel_h = 205;
+        L.usage_panel_gap = 14;
+        L.usage_bar_y = 72;
+        L.usage_reset_y = 116;
+        L.bt_info_panel_h = 160;
+        L.bt_reset_zone_h = 110;
+        L.bt_title_font    = &font_tiempos_56;
+        L.bt_status_font   = &font_styrene_48;
+        L.bt_device_font   = &font_styrene_28;
+        L.bt_credit_1_font = &font_styrene_24;
+        L.bt_credit_2_font = &font_styrene_20;
     } else {
         // Compact layout — tuned for 368x448 (AMOLED-1.8).
         L.content_y = 85;
@@ -101,7 +116,6 @@ static void compute_layout(const BoardCaps& c) {
 
 // ---- Usage screen widgets (single non-splash view) ----
 static lv_obj_t* usage_container;
-static lv_obj_t* lbl_title;
 static lv_obj_t* usage_group;   // the two usage panels — shown when connected
 static lv_obj_t* pair_group;    // pairing hint — shown when disconnected
 static lv_obj_t* bar_session;
@@ -112,7 +126,6 @@ static lv_obj_t* bar_weekly;
 static lv_obj_t* lbl_weekly_pct;
 static lv_obj_t* lbl_weekly_label;
 static lv_obj_t* lbl_weekly_reset;
-static lv_obj_t* lbl_anim;      // status line: connection state + whimsical idle
 
 // ---- Battery indicator (shared, on top) ----
 static lv_obj_t* battery_img;
@@ -135,63 +148,17 @@ static screen_t current_screen = SCREEN_USAGE;
 static bool     s_ble_connected = false;   // cached BLE connection state
 static uint32_t connected_at_ms = 0;       // when we last entered CONNECTED ("Connected" dwell)
 
-// Animation state
+// Pulse timer for urgency animation
 static uint32_t anim_last_ms = 0;
-static uint8_t anim_spinner_idx = 0;
-static uint8_t anim_phase = 0;
-static uint8_t anim_msg_idx = 0;
-static uint32_t anim_msg_start = 0;
-#define ANIM_MSG_MS     4000
 
-static const char* const spinner_frames[] = {
-    "\xC2\xB7", "\xE2\x9C\xBB", "\xE2\x9C\xBD",
-    "\xE2\x9C\xB6", "\xE2\x9C\xB3", "\xE2\x9C\xA2",
-};
-#define SPINNER_COUNT 6
-#define SPINNER_PHASES (2 * (SPINNER_COUNT - 1))  // 10: ping-pong 0..5..0
-
-static const uint16_t spinner_ms[SPINNER_COUNT] = {
-    260, 130, 130, 130, 130, 260,
-};
-
-static const char* const anim_messages[] = {
-    "Accomplishing", "Elucidating", "Perusing",
-    "Actioning", "Enchanting", "Philosophising",
-    "Actualizing", "Envisioning", "Pondering",
-    "Baking", "Finagling", "Pontificating",
-    "Booping", "Flibbertigibbeting", "Processing",
-    "Brewing", "Forging", "Puttering",
-    "Calculating", "Forming", "Puzzling",
-    "Cerebrating", "Frolicking", "Reticulating",
-    "Channelling", "Generating", "Ruminating",
-    "Churning", "Germinating", "Scheming",
-    "Clauding", "Hatching", "Schlepping",
-    "Coalescing", "Herding", "Shimmying",
-    "Cogitating", "Honking", "Shucking",
-    "Combobulating", "Hustling", "Simmering",
-    "Computing", "Ideating", "Smooshing",
-    "Concocting", "Imagining", "Spelunking",
-    "Conjuring", "Incubating", "Spinning",
-    "Considering", "Inferring", "Stewing",
-    "Contemplating", "Jiving", "Sussing",
-    "Cooking", "Manifesting", "Synthesizing",
-    "Crafting", "Marinating", "Thinking",
-    "Creating", "Meandering", "Tinkering",
-    "Crunching", "Moseying", "Transmuting",
-    "Deciphering", "Mulling", "Unfurling",
-    "Deliberating", "Mustering", "Unravelling",
-    "Determining", "Musing", "Vibing",
-    "Discombobulating", "Noodling", "Wandering",
-    "Divining", "Percolating", "Whirring",
-    "Doing", "Wibbling",
-    "Effecting", "Wizarding",
-    "Working", "Wrangling",
-};
-#define ANIM_MSG_COUNT (sizeof(anim_messages) / sizeof(anim_messages[0]))
+// Pulsing glow state — bar alternates between COL_RED and a dim red at 90%+
+// to signal urgency.  Driven by ui_tick_anim() once per spinner tick.
+static bool pulse_on = true;
 
 static lv_color_t pct_color(float pct) {
+    if (pct >= 90.0f) return pulse_on ? COL_RED : lv_color_hex(0x7a1a12);
     if (pct >= 80.0f) return COL_RED;
-    if (pct >= 50.0f) return COL_AMBER;
+    if (pct >= 60.0f) return COL_AMBER;
     return COL_GREEN;
 }
 
@@ -294,8 +261,8 @@ static void make_usage_panel(lv_obj_t* parent, int y, const char* pill_text,
 
     *out_reset = lv_label_create(panel);
     lv_label_set_text(*out_reset, "---");
-    lv_obj_set_style_text_font(*out_reset, &font_styrene_28, 0);
-    lv_obj_set_style_text_color(*out_reset, COL_DIM, 0);
+    lv_obj_set_style_text_font(*out_reset, &font_styrene_48, 0);
+    lv_obj_set_style_text_color(*out_reset, COL_TEXT, 0);
     lv_obj_set_pos(*out_reset, 0, L.usage_reset_y);
 }
 
@@ -364,12 +331,6 @@ static void init_usage_screen(lv_obj_t* scr) {
     lv_obj_clear_flag(usage_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(usage_container, global_click_cb, LV_EVENT_CLICKED, NULL);
 
-    lbl_title = lv_label_create(usage_container);
-    lv_label_set_text(lbl_title, "Usage");
-    lv_obj_set_style_text_font(lbl_title, &font_tiempos_56, 0);
-    lv_obj_set_style_text_color(lbl_title, COL_TEXT, 0);
-    lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 16, L.title_y);
-
     // Usage panels (shown when connected) live in a transparent full-size group
     // so they can be toggled against the pairing hint as one unit.
     usage_group = lv_obj_create(usage_container);
@@ -392,12 +353,6 @@ static void init_usage_screen(lv_obj_t* scr) {
     build_pair_group(usage_container);
     build_idle_group(usage_container);
 
-    // Status line — always visible on the usage view. Driven by ui_tick_anim().
-    lbl_anim = lv_label_create(usage_container);
-    lv_label_set_text(lbl_anim, "");
-    lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);
-    lv_obj_set_style_text_color(lbl_anim, COL_ACCENT, 0);
-    lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, -15);
 }
 
 // ======== Public API ========
@@ -419,13 +374,7 @@ void ui_init(void) {
         lv_obj_add_event_cb(splash_get_root(), global_click_cb, LV_EVENT_CLICKED, NULL);
     }
 
-    logo_img = lv_image_create(scr);
-    lv_image_set_src(logo_img, &logo_dsc);
-    lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
-
-    battery_img = lv_image_create(scr);
-    lv_image_set_src(battery_img, &battery_dscs[0]);
-    lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, L.title_y);
+    // logo_img and battery_img intentionally not created — no top bar on this layout.
 
 }
 
@@ -479,38 +428,22 @@ static void update_view_state(void) {
 void ui_tick_anim(void) {
     if (current_screen != SCREEN_USAGE) return;
     update_view_state();
-    if (view_state == 1) splash_mini_tick();   // animate the sleeping creature on the idle screen
+    if (view_state == 1) splash_mini_tick();
 
     uint32_t now = lv_tick_get();
-
-    if (now - anim_msg_start >= ANIM_MSG_MS) {
-        anim_msg_idx = (anim_msg_idx + 1) % ANIM_MSG_COUNT;
-        anim_msg_start = now;
-    }
-
-    if (now - anim_last_ms < spinner_ms[anim_spinner_idx]) return;
+    if (now - anim_last_ms < 250) return;
     anim_last_ms = now;
-    anim_phase = (anim_phase + 1) % SPINNER_PHASES;
-    anim_spinner_idx = (anim_phase < SPINNER_COUNT) ? anim_phase
-                                                    : (SPINNER_PHASES - anim_phase);
 
-    // Status text by priority. Whimsical messages only when connected & settled.
-    const char* text;
-    if (!s_ble_connected) {
-        text = "Waiting";              // advertising / waiting for a host connection
-    } else if (view_state == 1) {      // idle — alternate so it reads as alive AND data-less
-        text = (anim_msg_idx & 1) ? "No data" : "Listening";
-    } else if (now - connected_at_ms < 5000) {
-        text = "Connected";
-    } else {
-        text = anim_messages[anim_msg_idx];
+    // Pulse bar colors at 90%+ to signal urgency.
+    if (view_state == 2 && data_received) {
+        pulse_on = !pulse_on;
+        if (bar_session && bar_weekly) {
+            int sv = lv_bar_get_value(bar_session);
+            int wv = lv_bar_get_value(bar_weekly);
+            lv_obj_set_style_bg_color(bar_session, pct_color((float)sv), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(bar_weekly,  pct_color((float)wv), LV_PART_INDICATOR);
+        }
     }
-
-    // All states share the whimsical style: "<glyph> <Title-case word>…"
-    static char buf[80];
-    snprintf(buf, sizeof(buf), "%s %s\xE2\x80\xA6",
-             spinner_frames[anim_spinner_idx], text);
-    lv_label_set_text(lbl_anim, buf);
 }
 
 static screen_t prev_non_splash_screen = SCREEN_USAGE;
@@ -566,6 +499,7 @@ void ui_update_ble_status(ble_state_t state, const char* name, const char* mac) 
 }
 
 void ui_update_battery(int percent, bool charging) {
+    if (!battery_img) return;
     int idx;
     if (charging) {
         idx = 4;

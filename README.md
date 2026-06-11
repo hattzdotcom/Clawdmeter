@@ -14,7 +14,7 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 ## Screens
 
-The device boots into the splash. Tap the screen anywhere to switch to the Usage view; tap again to flip back to the splash.
+The device boots into the splash. Tap the screen anywhere to switch to the Usage view; tap again to flip back to the splash. On the LilyGo T4-S3 (no touchscreen), the PWR button switches between the clock screen and the usage view.
 
 |              Splash               |              Usage              |
 | :-------------------------------: | :-----------------------------: |
@@ -30,6 +30,7 @@ Boards supported out of the box:
 - [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786)
 - [Waveshare ESP32-C6-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-c6-touch-amoled-2.16.htm?&aff_id=149786) 
 - [Waveshare ESP32-S3-Touch-AMOLED-1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=149786)
+- [LilyGo T4-S3](https://www.lilygo.cc/products/t4-s3) — 2.41" RM690B0 AMOLED, 600×450 landscape (QSPI, no touchscreen)
 
 > Please check if a pull request exists for your alternative hardware port before opening a new one, providing QA feedback and testing on the same hardware is more valuable than duplicate pull requests.
 
@@ -134,13 +135,31 @@ Runs natively on Windows — no WSL required. A system-tray app polls your usage
 
 ```powershell
 pio run -d firmware -e waveshare_amoled_216 -t upload --upload-port COM5   # use your device's COM port
+pio run -d firmware -e lilygo_t4_s3         -t upload --upload-port COM5   # LilyGo T4-S3 AMOLED
+```
+
+If esptool prints a `UnicodeEncodeError`, set UTF-8 mode first:
+
+```powershell
+$env:PYTHONUTF8 = "1"; $env:PYTHONIOENCODING = "utf-8"
+pio run -d firmware -e lilygo_t4_s3 -t upload --upload-port COM5
 ```
 
 Run `pio run -d firmware` with no env to see the available board envs.
 
+Alternatively, flash the pre-built binary from `releases/lilygo_t4_s3/`:
+
+```powershell
+# Full factory image (bootloader + partitions + app) — use this for a first flash
+esptool.py --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 releases/lilygo_t4_s3/firmware.factory.bin
+
+# App-only — use this for updates after the first flash
+esptool.py --chip esp32s3 --port COM5 --baud 921600 write_flash 0x10000 releases/lilygo_t4_s3/firmware.bin
+```
+
 ### Pair the device
 
-The device is a bonded BLE HID keyboard, so pair it once: **Settings → Bluetooth & devices → Add device → Bluetooth**, then select "Claude Controller". Pairing is **required** — it enables the physical buttons and keeps a persistent connection (the device keeps showing your last-synced usage even after the daemon quits). To undo, use **Remove device** (this disables the buttons).
+The device is a bonded BLE HID keyboard, so pair it once: **Settings → Bluetooth & devices → Add device → Bluetooth**, then select "Clawdmeter". Pairing is **required** — it enables the physical buttons and keeps a persistent connection (the device keeps showing your last-synced usage even after the daemon quits). To undo, use **Remove device** (this disables the buttons).
 
 ### Install the daemon (recommended)
 
@@ -219,10 +238,10 @@ The device advertises a custom GATT service alongside the standard HID keyboard 
 JSON payload format (written to RX):
 
 ```json
-{ "s": 45, "sr": 120, "w": 28, "wr": 7200, "st": "allowed", "ok": true }
+{ "s": 45, "sr": 120, "w": 28, "wr": 7200, "st": "allowed", "ok": true, "t": 1749641234 }
 ```
 
-Fields: `s` = session %, `sr` = session reset (minutes), `w` = weekly %, `wr` = weekly reset (minutes), `st` = status, `ok` = success flag.
+Fields: `s` = session %, `sr` = session reset (minutes), `w` = weekly %, `wr` = weekly reset (minutes), `st` = status, `ok` = success flag, `t` = optional Unix timestamp adjusted for local timezone (used by the T4-S3 clock screen to set the ESP32 RTC).
 
 ## Recompiling fonts
 
@@ -321,6 +340,9 @@ See `tools/README.md` for details.
 - Pixel-art Clawd animation by [@amaanbuilds](https://x.com/amaanbuilds), sourced from [claudepix.vercel.app](https://claudepix.vercel.app). Frame data and palettes scraped + converted by the tooling in `tools/`.
 - Lucide icon set ([lucide.dev](https://lucide.dev), MIT) for bluetooth and battery UI glyphs.
 - Anthropic brand fonts (Tiempos Text, Styrene B) — see licensing warning below.
+- [LilyGo-AMOLED-Series](https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series) — LilyGo's Arduino library for the T4-S3 AMOLED display (RM690B0 / QSPI).
+- [kennygarreau/v1g2-t4s3](https://github.com/kennygarreau/v1g2-t4s3) — reference project for the LilyGo T4-S3 with LVGL.
+- [DuvenProjects/EV-Charger](https://github.com/DuvenProjects/EV-Charger) — another T4-S3 LVGL project used for display-init reference.
 
 ## Licensing gray area warning
 

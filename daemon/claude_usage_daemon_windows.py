@@ -23,7 +23,7 @@ import httpx
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
 
-DEVICE_NAME = "Claude Controller"
+DEVICE_NAME = "Clawdmeter"
 SERVICE_UUID = "4c41555a-4465-7669-6365-000000000001"
 RX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000002"
 REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004"
@@ -152,6 +152,7 @@ async def poll_api(token: str) -> dict | None:
         "wr": reset_minutes(hdr("anthropic-ratelimit-unified-7d-reset")),
         "st": hdr("anthropic-ratelimit-unified-5h-status", "unknown"),
         "ok": True,
+        "t": int(time.time() + datetime.datetime.now(datetime.timezone.utc).astimezone().utcoffset().total_seconds()),
     }
     return payload
 
