@@ -18,16 +18,16 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 ## Screens
 
-|                              Usage view                               |                  Clock screensaver                   |
-| :-------------------------------------------------------------------: | :--------------------------------------------------: |
-| ![Usage](screenshots/usage.png)                                       | ![Clock](screenshots/clock.png)                      |
-| Session (5h) and weekly (7d) bars in muted green → amber → dark red   | Dark red time + date; text shifts zone every 5 min   |
+|              Usage view               |           Clock — active            |       Clock — shifted zone       |
+| :-----------------------------------: | :---------------------------------: | :------------------------------: |
+| ![Usage](screenshots/usage.png)       | ![Clock](screenshots/timeclock.png) | ![Screensaver](screenshots/clock.png) |
+| Session (5h) + weekly (7d) bars       | Activates after 30 min idle         | Text shifts to a new zone every 5 min |
 
-The device boots into the splash screen. Tap anywhere to switch to the usage view; tap again to go back. While the splash is up, the PWR button cycles animations. **Hold the power button for 3 seconds, then release, to enter pairing mode** — this clears the saved Bluetooth bond and re-advertises. The firmware auto-rotates animations every 20 s within the current usage-rate group.
+**Usage view** — shows session (5-hour window) and weekly (7-day window) utilization. Bar color scales with load: muted forest green (0–50%), muted golden amber (51–75%), muted dark red (75%+). At 90%+ the bar pulses to draw attention.
 
-The usage view shows session (5-hour window) and weekly (7-day window) utilization bars. Bar color scales with load: muted forest green (0–50%), muted amber (51–75%), muted dark red (75%+). At 90%+ the bar pulses to draw attention.
+**Clock screensaver** — after 30 minutes of no change in your Claude usage the screen goes dark red clock. The time and date shift to a new position every 5 minutes across a 3×2 grid of screen zones to prevent AMOLED burn-in. Tapping returns directly to the usage view; the screensaver also exits automatically as soon as new usage data arrives.
 
-After 30 minutes of no change in your Claude usage stats, the screen switches to a full-screen clock to prevent AMOLED burn-in. The date and time text shifts to a new position every 5 minutes across a 3×2 grid of screen zones. Tapping returns directly to the usage view; the screensaver also exits automatically as soon as new usage data arrives.
+The device also has a splash screen with Clawd pixel-art animations that plays on boot. Tap anywhere to switch to the usage view; the PWR button cycles animations while the splash is up. **Hold the power button for 3 seconds then release to enter pairing mode** — clears the saved Bluetooth bond and re-advertises. The firmware auto-rotates animations every 20 s within the current usage-rate group.
 
 ## Hardware
 
