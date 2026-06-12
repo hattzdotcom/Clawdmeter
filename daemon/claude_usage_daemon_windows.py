@@ -38,6 +38,12 @@ ZOMBIE_BREAK_LIMIT = 1     # D-03: consecutive write failures before abandoning 
                            # N=2 would bust the 120s budget before reconnect even begins
 RECONNECT_BACKOFF_CAP = 8  # D-05: fast-reconnect cap (seconds); keeps stacked retries inside 120s SLA
                            # ~5–10s band per CONTEXT.md Claude's Discretion; 8 chosen as middle ground
+IDLE_TIMEOUT_SECS = 30 * 60  # switch device to clock screensaver after this many seconds of no change
+
+# Persistent idle-detection state across polls (module-level, outlives sessions)
+_last_s: int = -1
+_last_w: int = -1
+_last_change_time: float = 0.0
 
 API_URL = "https://api.anthropic.com/v1/messages"
 API_HEADERS_TEMPLATE = {
@@ -145,13 +151,26 @@ async def poll_api(token: str) -> dict | None:
         except ValueError:
             return 0
 
+    global _last_s, _last_w, _last_change_time
+
+    s_val = pct(hdr("anthropic-ratelimit-unified-5h-utilization"))
+    w_val = pct(hdr("anthropic-ratelimit-unified-7d-utilization"))
+
+    if s_val != _last_s or w_val != _last_w:
+        _last_s = s_val
+        _last_w = w_val
+        _last_change_time = now
+
+    idle = _last_change_time > 0 and (now - _last_change_time) >= IDLE_TIMEOUT_SECS
+
     payload = {
-        "s": pct(hdr("anthropic-ratelimit-unified-5h-utilization")),
+        "s": s_val,
         "sr": reset_minutes(hdr("anthropic-ratelimit-unified-5h-reset")),
-        "w": pct(hdr("anthropic-ratelimit-unified-7d-utilization")),
+        "w": w_val,
         "wr": reset_minutes(hdr("anthropic-ratelimit-unified-7d-reset")),
         "st": hdr("anthropic-ratelimit-unified-5h-status", "unknown"),
         "ok": True,
+        "idle": idle,
         "t": int(time.time() + datetime.datetime.now(datetime.timezone.utc).astimezone().utcoffset().total_seconds()),
     }
     return payload

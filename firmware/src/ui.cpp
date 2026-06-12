@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "splash.h"
 #include <lvgl.h>
+#include <time.h>
 #include "logo.h"
 #include "icons.h"
 #include "hal/board_caps.h"
@@ -148,6 +149,66 @@ static screen_t current_screen = SCREEN_USAGE;
 static bool     s_ble_connected = false;   // cached BLE connection state
 static uint32_t connected_at_ms = 0;       // when we last entered CONNECTED ("Connected" dwell)
 
+// Forward declaration — defined later alongside ui_show_screen
+static void global_click_cb(lv_event_t* e);
+
+// ---- Clock screensaver ----
+static lv_obj_t* clock_screen_obj = nullptr;
+static lv_obj_t* clock_time_lbl   = nullptr;
+static lv_obj_t* clock_date_lbl   = nullptr;
+static uint32_t  clock_move_ms    = 0;   // lv_tick when we last moved position
+static uint32_t  clock_tick_ms    = 0;   // lv_tick of last 1-second update
+static uint8_t   clock_zone       = 0;   // 0..5, cycles through 6 screen positions
+
+#define CLOCK_MOVE_MS  (5UL * 60UL * 1000UL)  // reposition every 5 minutes
+
+// Spread 6 positions across the screen to prevent AMOLED burn-in.
+// Labels are ~200px wide, ~100px tall (time + gap + date).
+// Position chosen dynamically in clock_place() so any board size works.
+static void clock_place(void) {
+    if (!clock_time_lbl || !clock_date_lbl) return;
+    const BoardCaps& c = board_caps();
+    const int16_t mg = 16;
+    const int16_t TW = 200;  // conservative text block width estimate
+    const int16_t BH = 100;  // time (~68px) + date (~32px) block height
+    int16_t rght = (c.width  - TW - mg > mg) ? c.width  - TW - mg : mg;
+    int16_t bot  = (c.height - BH - mg > mg) ? c.height - BH - mg : mg;
+    int16_t midx = mg + (rght - mg) / 2;
+    // 6 zones: top-left, top-mid, top-right, bottom-left, bottom-mid, bottom-right
+    uint8_t z = clock_zone % 6;
+    int16_t xs[3] = {mg, midx, rght};
+    int16_t ys[2] = {mg, bot};
+    int16_t x = xs[z % 3];
+    int16_t y = ys[z / 3];
+    lv_obj_set_pos(clock_time_lbl, x, y);
+    lv_obj_set_pos(clock_date_lbl, x, y + 68);  // ~56pt line height + 2px gap
+}
+
+static void init_clock_screen(lv_obj_t* scr) {
+    clock_screen_obj = lv_obj_create(scr);
+    lv_obj_set_size(clock_screen_obj, L.scr_w, L.scr_h);
+    lv_obj_set_pos(clock_screen_obj, 0, 0);
+    lv_obj_set_style_bg_color(clock_screen_obj, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(clock_screen_obj, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(clock_screen_obj, 0, 0);
+    lv_obj_set_style_pad_all(clock_screen_obj, 0, 0);
+    lv_obj_clear_flag(clock_screen_obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(clock_screen_obj, global_click_cb, LV_EVENT_CLICKED, NULL);
+
+    clock_time_lbl = lv_label_create(clock_screen_obj);
+    lv_label_set_text(clock_time_lbl, "--:--");
+    lv_obj_set_style_text_font(clock_time_lbl, &font_tiempos_56, 0);
+    lv_obj_set_style_text_color(clock_time_lbl, COL_TEXT, 0);
+
+    clock_date_lbl = lv_label_create(clock_screen_obj);
+    lv_label_set_text(clock_date_lbl, "---");
+    lv_obj_set_style_text_font(clock_date_lbl, &font_styrene_28, 0);
+    lv_obj_set_style_text_color(clock_date_lbl, COL_DIM, 0);
+
+    clock_place();
+    lv_obj_add_flag(clock_screen_obj, LV_OBJ_FLAG_HIDDEN);
+}
+
 // Pulse timer for urgency animation
 static uint32_t anim_last_ms = 0;
 
@@ -174,8 +235,7 @@ static void format_reset_time(int mins, char* buf, size_t len) {
     }
 }
 
-// Forward decls — callbacks defined near ui_show_screen below
-static void global_click_cb(lv_event_t* e);
+
 
 static lv_obj_t* make_panel(lv_obj_t* parent, int x, int y, int w, int h) {
     lv_obj_t* panel = lv_obj_create(parent);
@@ -369,6 +429,7 @@ void ui_init(void) {
 
     init_usage_screen(scr);
     splash_init(scr);
+    init_clock_screen(scr);
 
     if (splash_get_root()) {
         lv_obj_add_event_cb(splash_get_root(), global_click_cb, LV_EVENT_CLICKED, NULL);
@@ -456,16 +517,25 @@ static void apply_battery_visibility(void) {
 static void global_click_cb(lv_event_t* e) {
     (void)e;
     if (current_screen == SCREEN_SPLASH) ui_show_screen(prev_non_splash_screen);
-    else                                  ui_show_screen(SCREEN_SPLASH);
+    else if (current_screen == SCREEN_CLOCK) ui_show_screen(SCREEN_USAGE);
+    else                                     ui_show_screen(SCREEN_SPLASH);
 }
 
 void ui_show_screen(screen_t screen) {
     lv_obj_add_flag(usage_container, LV_OBJ_FLAG_HIDDEN);
     splash_hide();
+    if (clock_screen_obj) lv_obj_add_flag(clock_screen_obj, LV_OBJ_FLAG_HIDDEN);
 
     switch (screen) {
     case SCREEN_SPLASH:  splash_show(); break;
     case SCREEN_USAGE:   lv_obj_clear_flag(usage_container, LV_OBJ_FLAG_HIDDEN); break;
+    case SCREEN_CLOCK:
+        if (clock_screen_obj) {
+            lv_obj_clear_flag(clock_screen_obj, LV_OBJ_FLAG_HIDDEN);
+            clock_move_ms = lv_tick_get();
+            clock_tick_ms = 0;  // force time update on next tick
+        }
+        break;
     default: break;
     }
 
@@ -474,7 +544,8 @@ void ui_show_screen(screen_t screen) {
         else                          lv_obj_clear_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
     }
 
-    if (screen != SCREEN_SPLASH) prev_non_splash_screen = screen;
+    // SCREEN_CLOCK is not a "content" screen — don't overwrite the return destination
+    if (screen != SCREEN_SPLASH && screen != SCREEN_CLOCK) prev_non_splash_screen = screen;
     current_screen = screen;
     apply_battery_visibility();
 }
@@ -496,6 +567,36 @@ void ui_update_ble_status(ble_state_t state, const char* name, const char* mac) 
     if (s_ble_connected && !was_connected) connected_at_ms = lv_tick_get();
     // pair / idle / usage — picked from connection + data freshness.
     update_view_state();
+}
+
+void ui_tick_clock(void) {
+    if (current_screen != SCREEN_CLOCK) return;
+    if (!clock_time_lbl || !clock_date_lbl) return;
+
+    uint32_t now = lv_tick_get();
+
+    if (now - clock_tick_ms >= 1000) {
+        clock_tick_ms = now;
+        time_t t = time(nullptr);
+        if (t < 1400000000L) {
+            // RTC not yet synced — show placeholder until daemon sends "t"
+            lv_label_set_text(clock_time_lbl, "--:--");
+            lv_label_set_text(clock_date_lbl, "Waiting for time sync");
+        } else {
+            struct tm* tm_info = localtime(&t);
+            char tbuf[10], dbuf[24];
+            strftime(tbuf, sizeof(tbuf), "%H:%M", tm_info);
+            strftime(dbuf, sizeof(dbuf), "%a %b %d", tm_info);
+            lv_label_set_text(clock_time_lbl, tbuf);
+            lv_label_set_text(clock_date_lbl, dbuf);
+        }
+    }
+
+    if (now - clock_move_ms >= CLOCK_MOVE_MS) {
+        clock_move_ms = now;
+        clock_zone = (clock_zone + 1) % 6;
+        clock_place();
+    }
 }
 
 void ui_update_battery(int percent, bool charging) {

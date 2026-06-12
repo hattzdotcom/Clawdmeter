@@ -9,4 +9,5 @@ struct UsageData {
     char status[16];         // "allowed" or "limited"
     bool ok;                 // data parse succeeded
     bool valid;              // false until first successful parse
+    bool idle;               // daemon says no usage change for 30+ minutes
 };

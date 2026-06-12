@@ -36,6 +36,13 @@ KEYCHAIN_SERVICE = "Claude Code-credentials"
 CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 SAVED_ADDR_FILE = Path.home() / ".config" / "claude-usage-monitor" / "ble-address"
 
+IDLE_TIMEOUT_SECS = 30 * 60  # switch device to clock screensaver after this many seconds of no change
+
+# Persistent state for idle detection across polls
+_last_s: int = -1
+_last_w: int = -1
+_last_change_time: float = 0.0
+
 API_URL = "https://api.anthropic.com/v1/messages"
 API_HEADERS_TEMPLATE = {
     "anthropic-version": "2023-06-01",
@@ -303,13 +310,26 @@ async def poll_api(token: str) -> dict | None:
         except ValueError:
             return 0
 
+    global _last_s, _last_w, _last_change_time
+
+    s_val = pct(hdr("anthropic-ratelimit-unified-5h-utilization"))
+    w_val = pct(hdr("anthropic-ratelimit-unified-7d-utilization"))
+
+    if s_val != _last_s or w_val != _last_w:
+        _last_s = s_val
+        _last_w = w_val
+        _last_change_time = now
+
+    idle = _last_change_time > 0 and (now - _last_change_time) >= IDLE_TIMEOUT_SECS
+
     payload = {
-        "s": pct(hdr("anthropic-ratelimit-unified-5h-utilization")),
+        "s": s_val,
         "sr": reset_minutes(hdr("anthropic-ratelimit-unified-5h-reset")),
-        "w": pct(hdr("anthropic-ratelimit-unified-7d-utilization")),
+        "w": w_val,
         "wr": reset_minutes(hdr("anthropic-ratelimit-unified-7d-reset")),
         "st": hdr("anthropic-ratelimit-unified-5h-status", "unknown"),
         "ok": True,
+        "idle": idle,
     }
     return payload
 

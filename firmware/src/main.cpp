@@ -111,7 +111,8 @@ static bool parse_json(const char* json, UsageData* out) {
     out->weekly_pct = doc["w"] | 0.0f;
     out->weekly_reset_mins = doc["wr"] | -1;
     strlcpy(out->status, doc["st"] | "unknown", sizeof(out->status));
-    out->ok = doc["ok"] | false;
+    out->ok   = doc["ok"]   | false;
+    out->idle = doc["idle"] | false;
     out->valid = true;
 
     // Sync RTC if daemon sends a Unix timestamp ("t" field).
@@ -238,6 +239,15 @@ void setup() {
 
 static ble_state_t last_ble_state = BLE_STATE_INIT;
 
+// Screensaver idle tracking — compare successive usage values to detect 30 min
+// of no activity. The daemon sends "idle":true after 30 min; this local timer is
+// the fallback if the daemon is silent (e.g. BLE gap). Both paths feed the same
+// decision: show SCREEN_CLOCK when idle, return to SCREEN_SPLASH when active.
+static float    s_last_s            = -1.0f;
+static float    s_last_w            = -1.0f;
+static uint32_t s_last_change_ms    = 0;
+#define IDLE_USAGE_MS (30UL * 60UL * 1000UL)
+
 // Hold-to-pair gesture: hold the PWR button ~3s, then RELEASE → clear all BLE
 // bonds and re-advertise. Clearing on *release* (not while held) is deliberate:
 // holding to power the device OFF (AXP hardware shutdown at 8s) must not wipe
@@ -288,6 +298,7 @@ void loop() {
     idle_tick();
     lv_timer_handler();
     ui_tick_anim();
+    ui_tick_clock();
     ble_tick();
     power_hal_tick();
     imu_hal_tick();
@@ -369,6 +380,13 @@ void loop() {
 
     if (ble_has_data()) {
         if (parse_json(ble_get_data(), &usage)) {
+            // Track last time usage values changed (local 30-min fallback)
+            if (usage.session_pct != s_last_s || usage.weekly_pct != s_last_w) {
+                s_last_s = usage.session_pct;
+                s_last_w = usage.weekly_pct;
+                s_last_change_ms = millis();
+            }
+
             int g_before = usage_rate_group();
             usage_rate_sample(usage.session_pct);
             int g_after = usage_rate_group();
@@ -378,6 +396,17 @@ void loop() {
                 if (splash_is_active()) splash_pick_for_current_rate();
             }
             ui_update(&usage);
+
+            // Screensaver: daemon idle flag OR local timer (fallback when BLE gaps)
+            bool local_idle = (s_last_change_ms > 0 &&
+                               millis() - s_last_change_ms >= IDLE_USAGE_MS);
+            if (usage.idle || local_idle) {
+                if (ui_get_current_screen() != SCREEN_CLOCK)
+                    ui_show_screen(SCREEN_CLOCK);
+            } else if (ui_get_current_screen() == SCREEN_CLOCK) {
+                ui_show_screen(SCREEN_SPLASH);
+            }
+
             ble_send_ack();
         } else {
             ble_send_nack();
