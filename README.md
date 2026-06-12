@@ -1,10 +1,8 @@
-# Clawdmeter
+# Clawdmeter — LilyGo T4-S3 fork
 
-A small ESP32 dashboard I made for my desk to keep an eye on Claude Code usage.
+Personal fork of [HermannBjorgvin/Clawdmeter](https://github.com/HermannBjorgvin/Clawdmeter), running on a [LilyGo T4-S3 AMOLED](https://www.lilygo.cc/products/t4-s3). Adds T4-S3 hardware support (a pull request is open upstream) and a clock screensaver that activates after 30 minutes of idle Claude usage.
 
-It runs on a [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786) as well as a few other alternative boards and pairs over Bluetooth, the splash screen plays pixel-art Clawd animations that get
-busier when your usage rate climbs. The two side buttons send Space and
-Shift+Tab over BLE HID for Claude Code's voice mode and mode-toggle shortcuts.
+Clawdmeter is a small ESP32 dashboard for your desk that tracks Claude Code usage and pairs over Bluetooth. The splash screen plays pixel-art Clawd animations that get busier as your usage rate climbs. Physical buttons send Space and Shift+Tab over BLE HID for Claude Code's voice mode and mode-toggle shortcuts.
 
 |              Usage meter              |              Clawd animation screen              |
 | :-----------------------------------: | :----------------------------------------------: |
@@ -12,27 +10,33 @@ Shift+Tab over BLE HID for Claude Code's voice mode and mode-toggle shortcuts.
 
 The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaanbuilds](https://x.com/amaanbuilds)'s library of pixel-art Clawd sprites, check it out, it's lovely.
 
+## What's different from upstream
+
+- **LilyGo T4-S3 AMOLED** — 2.41" RM690B0 display, 600×450 landscape, CHSC5816 touch, SY6970 charger. A [pull request is open upstream](https://github.com/HermannBjorgvin/Clawdmeter/pulls) to merge the hardware HAL.
+- **Clock screensaver** — after 30 minutes of unchanged Claude usage the display switches to a date/time screen. The text moves to a new position every 5 minutes to prevent AMOLED burn-in. Tap to dismiss and return to the usage view. Automatically returns to the usage view when your stats start changing again.
+
 ## Screens
 
-The device boots into the splash. Tap the screen anywhere to switch to the Usage view; tap again to flip back to the splash.
+|              Usage view               |              Clock screensaver              |
+| :-----------------------------------: | :-----------------------------------------: |
+| ![Usage](screenshots/usage.png)       | ![Clock](screenshots/clock.png)             |
+| Session and weekly utilization        | Activates after 30 min idle; tap to dismiss |
 
-|              Splash               |              Usage              |
-| :-------------------------------: | :-----------------------------: |
-| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) |
-|   Splash; touch-toggle anytime    | Session and weekly utilization  |
+The device boots into the splash screen. Tap anywhere to switch to the usage view; tap again to go back. While the splash is up, the PWR button cycles animations. **Hold the power button for 3 seconds, then release, to enter pairing mode** — this clears the saved Bluetooth bond and re-advertises. The firmware auto-rotates animations every 20 s within the current usage-rate group.
 
-While the splash is up, the middle (PWR) button cycles animations. **Hold the power button for 3 seconds, then release, to put the device into pairing mode** — this clears the saved Bluetooth bond and re-advertises. The firmware also auto-rotates animations every 20 s within the current usage-rate group, so a long stretch on the splash isn't just one Clawd on loop.
+After 30 minutes of no change in your Claude usage stats, the screen switches to a full-screen clock to prevent burn-in. The date and time text shifts position every 5 minutes across 6 zones on the screen. Tapping goes straight to the usage view; the clock also exits automatically when new usage data arrives.
 
 ## Hardware
 
-Boards supported out of the box:
+### This fork — primary board
+
+- [LilyGo T4-S3](https://www.lilygo.cc/products/t4-s3) — 2.41" RM690B0 AMOLED, 600×450 landscape, QSPI, CHSC5816 touch
+
+### Also supported (inherited from upstream)
 
 - [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786)
-- [Waveshare ESP32-C6-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-c6-touch-amoled-2.16.htm?&aff_id=149786) 
+- [Waveshare ESP32-C6-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-c6-touch-amoled-2.16.htm?&aff_id=149786)
 - [Waveshare ESP32-S3-Touch-AMOLED-1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=149786)
-- [LilyGo T4-S3](https://www.lilygo.cc/products/t4-s3) — 2.41" RM690B0 AMOLED, 600×450 landscape (QSPI, CHSC5816 touch)
-
-> Please check if a pull request exists for your alternative hardware port before opening a new one, providing QA feedback and testing on the same hardware is more valuable than duplicate pull requests.
 
 **Porting to another board:** the firmware is a thin HAL with per-board folders under `firmware/src/boards/`. Drop in a new folder and a new PlatformIO env — `main.cpp`, `ui.cpp`, and `splash.cpp` never need to change. See [`docs/porting/adding-a-board.md`](docs/porting/adding-a-board.md) for the walk-through and [`docs/porting/hal-contract.md`](docs/porting/hal-contract.md) for the interfaces a port must implement.
 
@@ -134,8 +138,8 @@ Runs natively on Windows — no WSL required. A system-tray app polls your usage
 ### Flash the firmware
 
 ```powershell
-pio run -d firmware -e waveshare_amoled_216 -t upload --upload-port COM5   # use your device's COM port
 pio run -d firmware -e lilygo_t4_s3         -t upload --upload-port COM5   # LilyGo T4-S3 AMOLED
+pio run -d firmware -e waveshare_amoled_216 -t upload --upload-port COM5   # Waveshare 2.16"
 ```
 
 If esptool prints a `UnicodeEncodeError`, set UTF-8 mode first:
@@ -145,7 +149,7 @@ $env:PYTHONUTF8 = "1"; $env:PYTHONIOENCODING = "utf-8"
 pio run -d firmware -e lilygo_t4_s3 -t upload --upload-port COM5
 ```
 
-Run `pio run -d firmware` with no env to see the available board envs.
+Run `pio run -d firmware` with no env to see all available board envs.
 
 Alternatively, flash the pre-built binary from `releases/lilygo_t4_s3/`:
 
@@ -207,20 +211,29 @@ reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v Clawdmeter /f
 1. The daemon reads your Claude Code OAuth token — from the macOS Keychain (service `Claude Code-credentials`) on macOS, or from `~/.claude/.credentials.json` on Linux (`%USERPROFILE%\.claude\.credentials.json` on Windows).
 2. It makes a minimal API call to `api.anthropic.com/v1/messages` — one token of Haiku, basically free.
 3. The usage numbers come straight out of the response headers (`anthropic-ratelimit-unified-5h-utilization` and friends).
-4. The daemon connects to the ESP32 over BLE and writes a JSON payload to the GATT RX characteristic.
+4. The daemon connects to the ESP32 over BLE and writes a JSON payload to the GATT RX characteristic every 60 seconds.
 5. The firmware parses it and updates the LVGL dashboard.
 6. The firmware also tracks the rate of change of session % over a 5-minute window and picks splash animations from the matching mood group.
-7. The two side buttons are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
+7. After 30 minutes of unchanged usage stats the daemon sends `"idle": true` and the device switches to the clock screensaver.
+8. The two side buttons (where present) are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
 
 ## Physical buttons
 
-The board has three side buttons. Left and right send HID keys; the middle (PWR) button cycles splash animations and, held for 3 seconds, triggers pairing mode.
+Button layout is board-dependent. The LilyGo T4-S3 has one button; the Waveshare boards have three.
 
-| Button           | GPIO         | Function                                                       |
-| ---------------- | ------------ | -------------------------------------------------------------- |
-| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)       |
+**LilyGo T4-S3**
+
+| Button  | GPIO   | Function                                                 |
+| ------- | ------ | -------------------------------------------------------- |
+| **BOOT**| GPIO 0 | Hold to send Space (Claude Code voice-mode push-to-talk) |
+
+**Waveshare AMOLED-2.16 / 1.8**
+
+| Button           | GPIO         | Function                                                     |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)     |
 | **Middle** (PWR) | AXP2101 PKEY | On splash: cycle animations. Hold 3s + release: pairing mode |
-| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)              |
+| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)            |
 
 Space and Shift+Tab go out as standard BLE HID keyboard reports, so they trigger in whatever window has focus on the paired host — not just Claude Code.
 
@@ -238,10 +251,19 @@ The device advertises a custom GATT service alongside the standard HID keyboard 
 JSON payload format (written to RX):
 
 ```json
-{ "s": 45, "sr": 120, "w": 28, "wr": 7200, "st": "allowed", "ok": true, "t": 1749641234 }
+{ "s": 45, "sr": 120, "w": 28, "wr": 7200, "st": "allowed", "ok": true, "idle": false, "t": 1749641234 }
 ```
 
-Fields: `s` = session %, `sr` = session reset (minutes), `w` = weekly %, `wr` = weekly reset (minutes), `st` = status, `ok` = success flag, `t` = optional Unix timestamp adjusted for local timezone (used by the T4-S3 clock screen to set the ESP32 RTC).
+| Field | Type | Description |
+|-------|------|-------------|
+| `s`    | int  | Session (5h) utilization % |
+| `sr`   | int  | Minutes until session resets |
+| `w`    | int  | Weekly (7d) utilization % |
+| `wr`   | int  | Minutes until weekly resets |
+| `st`   | str  | Status string (`"allowed"` / `"limited"`) |
+| `ok`   | bool | API call succeeded |
+| `idle` | bool | `true` after 30+ minutes of unchanged usage — triggers the clock screensaver |
+| `t`    | int  | Unix timestamp adjusted for local timezone — syncs the ESP32 RTC so the clock screen shows correct local time |
 
 ## Recompiling fonts
 
@@ -254,7 +276,7 @@ npm install -g lv_font_conv
 Generate each one (one at a time — `lv_font_conv` doesn't like loop-driven invocations) with `--no-compress` (required for LVGL 9):
 
 ```bash
-# Tiempos Text (titles, 56px)
+# Tiempos Text (titles and clock time display, 56px)
 lv_font_conv --font assets/TiemposText-400-Regular.otf -r 0x20-0x7E \
   --size 56 --format lvgl --bpp 4 --no-compress \
   -o firmware/src/font_tiempos_56.c --lv-include "lvgl.h"
@@ -301,12 +323,6 @@ glyph bitmap data, the build needs `-DLV_FONT_FMT_TXT_LARGE=1` in
 `platformio.ini` build flags so font descriptor offsets switch from
 16-bit to 32-bit.
 
-The CJK font is used for the Activity screen's user-prompt row and todo
-content rows. The headline (28pt Styrene B) and titles stay ASCII-only
-to preserve the brand font — Chinese text in those slots renders as
-empty boxes. Add a `font_cjk_28.c` if full coverage is needed (~1MB
-more flash).
-
 ## Converting Lucide icons
 
 The UI uses a small set of [Lucide](https://lucide.dev) icons (bluetooth + battery states) converted to RGB565 / RGB565A8 C arrays for LVGL.
@@ -337,12 +353,14 @@ See `tools/README.md` for details.
 
 ## Credits
 
+- Original project by [HermannBjorgvin](https://github.com/HermannBjorgvin/Clawdmeter).
 - Pixel-art Clawd animation by [@amaanbuilds](https://x.com/amaanbuilds), sourced from [claudepix.vercel.app](https://claudepix.vercel.app). Frame data and palettes scraped + converted by the tooling in `tools/`.
 - Lucide icon set ([lucide.dev](https://lucide.dev), MIT) for bluetooth and battery UI glyphs.
 - Anthropic brand fonts (Tiempos Text, Styrene B) — see licensing warning below.
 - [LilyGo-AMOLED-Series](https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series) — LilyGo's Arduino library for the T4-S3 AMOLED display (RM690B0 / QSPI).
 - [kennygarreau/v1g2-t4s3](https://github.com/kennygarreau/v1g2-t4s3) — reference project for the LilyGo T4-S3 with LVGL.
 - [DuvenProjects/EV-Charger](https://github.com/DuvenProjects/EV-Charger) — another T4-S3 LVGL project used for display-init reference.
+- macOS port by [Chris Davidson (@lorddavidson)](https://github.com/lorddavidson).
 
 ## Licensing gray area warning
 
