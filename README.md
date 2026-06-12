@@ -14,7 +14,7 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 ## Screens
 
-The device boots into the splash. Tap the screen anywhere to switch to the Usage view; tap again to flip back to the splash. On the LilyGo T4-S3 (no touchscreen), the PWR button switches between the clock screen and the usage view.
+The device boots into the splash. Tap the screen anywhere to switch to the Usage view; tap again to flip back to the splash.
 
 |              Splash               |              Usage              |
 | :-------------------------------: | :-----------------------------: |
@@ -30,7 +30,7 @@ Boards supported out of the box:
 - [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786)
 - [Waveshare ESP32-C6-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-c6-touch-amoled-2.16.htm?&aff_id=149786) 
 - [Waveshare ESP32-S3-Touch-AMOLED-1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=149786)
-- [LilyGo T4-S3](https://www.lilygo.cc/products/t4-s3) — 2.41" RM690B0 AMOLED, 600×450 landscape (QSPI, no touchscreen)
+- [LilyGo T4-S3](https://www.lilygo.cc/products/t4-s3) — 2.41" RM690B0 AMOLED, 600×450 landscape (QSPI, CHSC5816 touch)
 
 > Please check if a pull request exists for your alternative hardware port before opening a new one, providing QA feedback and testing on the same hardware is more valuable than duplicate pull requests.
 
