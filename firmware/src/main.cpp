@@ -401,10 +401,15 @@ void loop() {
             bool local_idle = (s_last_change_ms > 0 &&
                                millis() - s_last_change_ms >= IDLE_USAGE_MS);
             if (usage.idle || local_idle) {
-                if (ui_get_current_screen() != SCREEN_CLOCK)
+                if (ui_get_current_screen() != SCREEN_CLOCK) {
+                    Serial.printf("Screensaver on  (daemon=%d local=%d s=%.0f)\n",
+                        (int)usage.idle, (int)local_idle, usage.session_pct);
                     ui_show_screen(SCREEN_CLOCK);
-            } else if (ui_get_current_screen() == SCREEN_CLOCK) {
-                ui_show_screen(SCREEN_SPLASH);
+                }
+            } else if (ui_get_current_screen() != SCREEN_USAGE) {
+                Serial.printf("Screensaver off (daemon=%d local=%d s=%.0f)\n",
+                    (int)usage.idle, (int)local_idle, usage.session_pct);
+                ui_show_screen(SCREEN_USAGE);
             }
 
             ble_send_ack();

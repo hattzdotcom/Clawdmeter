@@ -1,6 +1,6 @@
 # Clawdmeter — LilyGo T4-S3 fork
 
-Personal fork of [HermannBjorgvin/Clawdmeter](https://github.com/HermannBjorgvin/Clawdmeter), running on a [LilyGo T4-S3 AMOLED](https://www.lilygo.cc/products/t4-s3). Adds T4-S3 hardware support (a pull request is open upstream) and a clock screensaver that activates after 30 minutes of idle Claude usage.
+Personal fork of [HermannBjorgvin/Clawdmeter](https://github.com/HermannBjorgvin/Clawdmeter), running on a [LilyGo T4-S3 AMOLED](https://www.lilygo.cc/products/t4-s3). Adds T4-S3 hardware support (a pull request is open upstream), a clock screensaver that activates after 30 minutes of idle Claude usage, and a dark muted-red AMOLED theme throughout.
 
 Clawdmeter is a small ESP32 dashboard for your desk that tracks Claude Code usage and pairs over Bluetooth. The splash screen plays pixel-art Clawd animations that get busier as your usage rate climbs. Physical buttons send Space and Shift+Tab over BLE HID for Claude Code's voice mode and mode-toggle shortcuts.
 
@@ -14,17 +14,20 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 - **LilyGo T4-S3 AMOLED** — 2.41" RM690B0 display, 600×450 landscape, CHSC5816 touch, SY6970 charger. A [pull request is open upstream](https://github.com/HermannBjorgvin/Clawdmeter/pulls) to merge the hardware HAL.
 - **Clock screensaver** — after 30 minutes of unchanged Claude usage the display switches to a date/time screen. The text moves to a new position every 5 minutes to prevent AMOLED burn-in. Tap to dismiss and return to the usage view. Automatically returns to the usage view when your stats start changing again.
+- **Dark muted-red AMOLED theme** — near-black background with brick-red usage text and usage bars that graduate from muted green (0–50%) through amber (51–75%) to dark red (75%+). No neons; all tones are deliberately dim to be easy on the eyes in a dark room. The screensaver clock is a deeper, darker red so it's never distracting at night.
 
 ## Screens
 
-|              Usage view               |              Clock screensaver              |
-| :-----------------------------------: | :-----------------------------------------: |
-| ![Usage](screenshots/usage.png)       | ![Clock](screenshots/clock.png)             |
-| Session and weekly utilization        | Activates after 30 min idle; tap to dismiss |
+|              Usage view               |           Clock — active            |       Clock — shifted zone       |
+| :-----------------------------------: | :---------------------------------: | :------------------------------: |
+| ![Usage](screenshots/usage.png)       | ![Clock](screenshots/timeclock.png) | ![Screensaver](screenshots/clock.png) |
+| Session (5h) + weekly (7d) bars       | Activates after 30 min idle         | Text shifts to a new zone every 5 min |
 
-The device boots into the splash screen. Tap anywhere to switch to the usage view; tap again to go back. While the splash is up, the PWR button cycles animations. **Hold the power button for 3 seconds, then release, to enter pairing mode** — this clears the saved Bluetooth bond and re-advertises. The firmware auto-rotates animations every 20 s within the current usage-rate group.
+**Usage view** — shows session (5-hour window) and weekly (7-day window) utilization. Bar color scales with load: muted forest green (0–50%), muted golden amber (51–75%), muted dark red (75%+). At 90%+ the bar pulses to draw attention.
 
-After 30 minutes of no change in your Claude usage stats, the screen switches to a full-screen clock to prevent burn-in. The date and time text shifts position every 5 minutes across 6 zones on the screen. Tapping goes straight to the usage view; the clock also exits automatically when new usage data arrives.
+**Clock screensaver** — after 30 minutes of no change in your Claude usage the screen goes dark red clock. The time and date shift to a new position every 5 minutes across a 3×2 grid of screen zones to prevent AMOLED burn-in. Tapping returns directly to the usage view; the screensaver also exits automatically as soon as new usage data arrives.
+
+The device also has a splash screen with Clawd pixel-art animations that plays on boot. Tap anywhere to switch to the usage view; the PWR button cycles animations while the splash is up. **Hold the power button for 3 seconds then release to enter pairing mode** — clears the saved Bluetooth bond and re-advertises. The firmware auto-rotates animations every 20 s within the current usage-rate group.
 
 ## Hardware
 
@@ -214,7 +217,7 @@ reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v Clawdmeter /f
 4. The daemon connects to the ESP32 over BLE and writes a JSON payload to the GATT RX characteristic every 60 seconds.
 5. The firmware parses it and updates the LVGL dashboard.
 6. The firmware also tracks the rate of change of session % over a 5-minute window and picks splash animations from the matching mood group.
-7. After 30 minutes of unchanged usage stats the daemon sends `"idle": true` and the device switches to the clock screensaver.
+7. After 30 minutes of unchanged usage stats the daemon sends `"idle": true` and the device switches to the clock screensaver. The firmware also tracks idle locally — if BLE drops it will still engage the screensaver on its own timer.
 8. The two side buttons (where present) are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
 
 ## Physical buttons
@@ -276,19 +279,20 @@ npm install -g lv_font_conv
 Generate each one (one at a time — `lv_font_conv` doesn't like loop-driven invocations) with `--no-compress` (required for LVGL 9):
 
 ```bash
-# Tiempos Text (titles and clock time display, 56px)
-lv_font_conv --font assets/TiemposText-400-Regular.otf -r 0x20-0x7E \
-  --size 56 --format lvgl --bpp 4 --no-compress \
-  -o firmware/src/font_tiempos_56.c --lv-include "lvgl.h"
-
-# Styrene B (large numbers 48, panel labels 28, small text 24, minimal 20)
+# Styrene B — the only font actively used in the UI (titles, clock, labels, small text)
 for size in 48 28 24 20; do
   lv_font_conv --font assets/StyreneB-Regular.otf -r 0x20-0x7E \
     --size $size --format lvgl --bpp 4 --no-compress \
     -o firmware/src/font_styrene_${size}.c --lv-include "lvgl.h"
 done
 
-# DejaVu Sans Mono (32px, with spinner Unicode chars)
+# Tiempos Text — compiled into the binary but not currently referenced by the UI.
+# Regenerate if you re-introduce it for a different screen layout.
+lv_font_conv --font assets/TiemposText-400-Regular.otf -r 0x20-0x7E \
+  --size 56 --format lvgl --bpp 4 --no-compress \
+  -o firmware/src/font_tiempos_56.c --lv-include "lvgl.h"
+
+# DejaVu Sans Mono — compiled in but not currently referenced by the UI.
 lv_font_conv --font assets/DejaVuSansMono.ttf \
   -r 0x20-0x7E,0xB7,0x2026,0x2722,0x2733,0x2736,0x273B,0x273D \
   --size 32 --format lvgl --bpp 4 --no-compress \

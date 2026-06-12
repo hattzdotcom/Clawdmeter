@@ -40,9 +40,11 @@ RECONNECT_BACKOFF_CAP = 8  # D-05: fast-reconnect cap (seconds); keeps stacked r
                            # ~5–10s band per CONTEXT.md Claude's Discretion; 8 chosen as middle ground
 IDLE_TIMEOUT_SECS = 30 * 60  # switch device to clock screensaver after this many seconds of no change
 
-# Persistent idle-detection state across polls (module-level, outlives sessions)
-_last_s: int = -1
-_last_w: int = -1
+# Persistent idle-detection state across polls (module-level, outlives sessions).
+# Tracked at raw float precision so sub-1% utilization changes (short sessions)
+# still clear the idle flag — integer rounding would miss them.
+_last_s_raw: float = -1.0
+_last_w_raw: float = -1.0
 _last_change_time: float = 0.0
 
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -151,14 +153,23 @@ async def poll_api(token: str) -> dict | None:
         except ValueError:
             return 0
 
-    global _last_s, _last_w, _last_change_time
+    global _last_s_raw, _last_w_raw, _last_change_time
 
-    s_val = pct(hdr("anthropic-ratelimit-unified-5h-utilization"))
-    w_val = pct(hdr("anthropic-ratelimit-unified-7d-utilization"))
+    s_str = hdr("anthropic-ratelimit-unified-5h-utilization")
+    w_str = hdr("anthropic-ratelimit-unified-7d-utilization")
+    s_val = pct(s_str)
+    w_val = pct(w_str)
+    try:
+        s_raw = float(s_str)
+        w_raw = float(w_str)
+    except ValueError:
+        s_raw, w_raw = 0.0, 0.0
 
-    if s_val != _last_s or w_val != _last_w:
-        _last_s = s_val
-        _last_w = w_val
+    # 0.001 threshold = 0.1 % sensitivity — catches any real usage even if the
+    # rounded integer value doesn't change.
+    if abs(s_raw - _last_s_raw) > 0.001 or abs(w_raw - _last_w_raw) > 0.001:
+        _last_s_raw = s_raw
+        _last_w_raw = w_raw
         _last_change_time = now
 
     idle = _last_change_time > 0 and (now - _last_change_time) >= IDLE_TIMEOUT_SECS
