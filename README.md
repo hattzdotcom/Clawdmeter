@@ -25,7 +25,7 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 **Usage view** — shows session (5-hour window) and weekly (7-day window) utilization. Bar color scales with load: muted forest green (0–50%), muted golden amber (51–75%), muted dark red (75%+). At 90%+ the bar pulses to draw attention.
 
-**Clock screensaver** — after 30 minutes of no change in your Claude usage the screen goes dark red clock. The time and date shift to a new position every 5 minutes across a 3×2 grid of screen zones to prevent AMOLED burn-in. Tapping returns directly to the usage view; the screensaver also exits automatically as soon as new usage data arrives.
+**Clock screensaver** — after 30 minutes of no change in your Claude usage the screen goes dark red clock. The time and date shift to a new position every 5 minutes across a 3×2 grid of screen zones to prevent AMOLED burn-in. Tapping returns directly to the usage view; the screensaver also exits automatically when your Claude usage shifts by 1 percentage point or more.
 
 The device also has a splash screen with Clawd pixel-art animations that plays on boot. Tap anywhere to switch to the usage view; the PWR button cycles animations while the splash is up. **Hold the power button for 3 seconds then release to enter pairing mode** — clears the saved Bluetooth bond and re-advertises. The firmware auto-rotates animations every 20 s within the current usage-rate group.
 
