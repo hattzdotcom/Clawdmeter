@@ -7,15 +7,12 @@
 #include "hal/board_caps.h"
 
 // Custom fonts (scaled for 314 PPI, ~1.9x from original 165 PPI)
-LV_FONT_DECLARE(font_tiempos_56);
-LV_FONT_DECLARE(font_tiempos_34);
 LV_FONT_DECLARE(font_styrene_48);
 LV_FONT_DECLARE(font_styrene_28);
 LV_FONT_DECLARE(font_styrene_24);
 LV_FONT_DECLARE(font_styrene_20);
 LV_FONT_DECLARE(font_styrene_16);
 LV_FONT_DECLARE(font_styrene_14);
-LV_FONT_DECLARE(font_mono_32);
 
 // Layout values computed from the active board's geometry. Populated once
 // in ui_init() and treated as const for the rest of the program. Adding a
@@ -64,7 +61,7 @@ static void compute_layout(const BoardCaps& c) {
         L.usage_reset_y = 94;
         L.bt_info_panel_h = 160;
         L.bt_reset_zone_h = 110;
-        L.bt_title_font    = &font_tiempos_56;
+        L.bt_title_font    = &font_styrene_48;
         L.bt_status_font   = &font_styrene_48;
         L.bt_device_font   = &font_styrene_28;
         L.bt_credit_1_font = &font_styrene_24;
@@ -79,7 +76,7 @@ static void compute_layout(const BoardCaps& c) {
         L.usage_reset_y = 116;
         L.bt_info_panel_h = 160;
         L.bt_reset_zone_h = 110;
-        L.bt_title_font    = &font_tiempos_56;
+        L.bt_title_font    = &font_styrene_48;
         L.bt_status_font   = &font_styrene_48;
         L.bt_device_font   = &font_styrene_28;
         L.bt_credit_1_font = &font_styrene_24;
@@ -93,7 +90,7 @@ static void compute_layout(const BoardCaps& c) {
         L.usage_reset_y = 78;
         L.bt_info_panel_h = 140;
         L.bt_reset_zone_h = 90;
-        L.bt_title_font    = &font_tiempos_34;
+        L.bt_title_font    = &font_styrene_28;
         L.bt_status_font   = &font_styrene_28;
         L.bt_device_font   = &font_styrene_20;
         L.bt_credit_1_font = &font_styrene_16;
@@ -105,15 +102,17 @@ static void compute_layout(const BoardCaps& c) {
 
 // Anthropic brand palette — design tokens live in theme.h
 #include "theme.h"
-#define COL_BG        THEME_BG
-#define COL_PANEL     THEME_PANEL
-#define COL_TEXT      THEME_TEXT
-#define COL_DIM       THEME_DIM
-#define COL_ACCENT    THEME_ACCENT
-#define COL_GREEN     THEME_GREEN
-#define COL_AMBER     THEME_AMBER
-#define COL_RED       THEME_RED
-#define COL_BAR_BG    THEME_BAR_BG
+#define COL_BG         THEME_BG
+#define COL_PANEL      THEME_PANEL
+#define COL_TEXT       THEME_TEXT
+#define COL_DIM        THEME_DIM
+#define COL_ACCENT     THEME_ACCENT
+#define COL_GREEN      THEME_GREEN
+#define COL_AMBER      THEME_AMBER
+#define COL_RED        THEME_RED
+#define COL_BAR_BG     THEME_BAR_BG
+#define COL_CLOCK      THEME_CLOCK
+#define COL_CLOCK_DIM  THEME_CLOCK_DIM
 
 // ---- Usage screen widgets (single non-splash view) ----
 static lv_obj_t* usage_container;
@@ -197,13 +196,13 @@ static void init_clock_screen(lv_obj_t* scr) {
 
     clock_time_lbl = lv_label_create(clock_screen_obj);
     lv_label_set_text(clock_time_lbl, "--:--");
-    lv_obj_set_style_text_font(clock_time_lbl, &font_tiempos_56, 0);
-    lv_obj_set_style_text_color(clock_time_lbl, COL_TEXT, 0);
+    lv_obj_set_style_text_font(clock_time_lbl, &font_styrene_48, 0);
+    lv_obj_set_style_text_color(clock_time_lbl, COL_CLOCK, 0);
 
     clock_date_lbl = lv_label_create(clock_screen_obj);
     lv_label_set_text(clock_date_lbl, "---");
     lv_obj_set_style_text_font(clock_date_lbl, &font_styrene_28, 0);
-    lv_obj_set_style_text_color(clock_date_lbl, COL_DIM, 0);
+    lv_obj_set_style_text_color(clock_date_lbl, COL_CLOCK_DIM, 0);
 
     clock_place();
     lv_obj_add_flag(clock_screen_obj, LV_OBJ_FLAG_HIDDEN);
@@ -217,9 +216,9 @@ static uint32_t anim_last_ms = 0;
 static bool pulse_on = true;
 
 static lv_color_t pct_color(float pct) {
-    if (pct >= 90.0f) return pulse_on ? COL_RED : lv_color_hex(0x7a1a12);
-    if (pct >= 80.0f) return COL_RED;
-    if (pct >= 60.0f) return COL_AMBER;
+    if (pct >= 90.0f) return pulse_on ? COL_RED : lv_color_hex(0x4D1919);
+    if (pct >= 75.0f) return COL_RED;
+    if (pct >= 50.0f) return COL_AMBER;
     return COL_GREEN;
 }
 
@@ -532,6 +531,7 @@ void ui_show_screen(screen_t screen) {
     case SCREEN_CLOCK:
         if (clock_screen_obj) {
             lv_obj_clear_flag(clock_screen_obj, LV_OBJ_FLAG_HIDDEN);
+            clock_place();      // apply current zone before first render
             clock_move_ms = lv_tick_get();
             clock_tick_ms = 0;  // force time update on next tick
         }
@@ -590,6 +590,9 @@ void ui_tick_clock(void) {
             lv_label_set_text(clock_time_lbl, tbuf);
             lv_label_set_text(clock_date_lbl, dbuf);
         }
+        // Re-apply position: lv_label_set_text() can trigger a layout pass
+        // that resets positions set by lv_obj_set_pos() on content-sized labels.
+        clock_place();
     }
 
     if (now - clock_move_ms >= CLOCK_MOVE_MS) {
